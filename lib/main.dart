@@ -63,8 +63,19 @@ class ScrcpyController {
         'adb.exe',
         'AdbWinApi.dll',
         'AdbWinUsbApi.dll',
+        'avcodec-61.dll',
+        'avformat-61.dll',
+        'avutil-59.dll',
+        'desktop.ini',
+        'icon.png',
+        'libusb-1.0.dll',
+        'open_a_terminal_here.bat',
         'scrcpy.exe',
-        // Add other necessary files as needed
+        'scrcpy-console.bat',
+        'scrcpy-noconsole.vbs',
+        'scrcpy-server',
+        'SDL2.dll',
+        'swresample-5.dll',
       ];
 
       for (String file in files) {
@@ -81,79 +92,86 @@ class ScrcpyController {
     }
   }
 
-Future<void> startScrcpy() async {
-  if (scrcpyPath == null) {
-    addLog('scrcpy.exe is not ready.');
-    return;
-  }
-
-  if (enableWireless) {
-    await setDeviceIp();
-    if (deviceIp.isEmpty) {
-      addLog('Failed to detect device IP. Ensure the device is connected over Wi-Fi.');
+  Future<void> startScrcpy() async {
+    if (scrcpyPath == null) {
+      addLog('scrcpy.exe is not ready.');
       return;
     }
 
-    final connectResult = await Process.run('adb', ['connect', '$deviceIp:5555']);
-    if (connectResult.exitCode != 0) {
-      addLog('Failed to connect to the device over Wi-Fi: ${connectResult.stderr}');
-      return;
+    if (enableWireless) {
+      await setDeviceIp();
+      if (deviceIp.isEmpty) {
+        addLog(
+            'Failed to detect device IP. Ensure the device is connected over Wi-Fi.');
+        return;
+      }
+
+      final connectResult =
+          await Process.run('adb', ['connect', '$deviceIp:5555']);
+      if (connectResult.exitCode != 0) {
+        addLog(
+            'Failed to connect to the device over Wi-Fi: ${connectResult.stderr}');
+        return;
+      }
+      addLog('Connected to device wirelessly: $deviceIp');
     }
-    addLog('Connected to device wirelessly: $deviceIp');
-  }
 
-  if (enableRecording) {
-    await setRecordingPath();
-    if (recordingPath.isEmpty) {
-      addLog('Recording path is not set.');
-      return;
+    if (enableRecording) {
+      await setRecordingPath();
+      if (recordingPath.isEmpty) {
+        addLog('Recording path is not set.');
+        return;
+      }
     }
-  }
 
-  // Default arguments
-  List<String> arguments = ['-m1920'];
+    // Default arguments
+    List<String> arguments = ['-m1920'];
 
-  if (enableRecording && recordingPath.isNotEmpty) {
-    arguments.addAll(['--record', recordingPath]);
-    addLog('Recording to: $recordingPath');
-    isRecording = true;
-  }
+    // Select TCPIP if wireless mode is enabled
+    if (enableWireless) {
+      arguments.add('-e'); // Use tcpip connection when wireless is enabled
+    }
 
-  try {
-    scrcpyProcess = await Process.start(scrcpyPath!, arguments);
-    addLog('scrcpy started with resolution 1920x1080.');
-    isMirroring = true;
+    if (enableRecording && recordingPath.isNotEmpty) {
+      arguments.addAll(['--record', recordingPath]);
+      addLog('Recording to: $recordingPath');
+      isRecording = true;
+    }
 
-    scrcpyProcess!.stdout.transform(utf8.decoder).listen((data) {
-      addLog(data);
-    });
+    try {
+      scrcpyProcess = await Process.start(scrcpyPath!, arguments);
+      addLog('scrcpy started with resolution 1920x1080.');
+      isMirroring = true;
 
-    scrcpyProcess!.stderr.transform(utf8.decoder).listen((data) {
-      if (data.contains('ERROR')) {
-        addLog('Encountered error: $data');
-        stopScrcpy();
-        addLog('Retrying with default settings...');
-        // Retry with a more basic configuration
-        arguments = [];
-        startScrcpy(); // Retry without specific resolution
-      } else {
+      scrcpyProcess!.stdout.transform(utf8.decoder).listen((data) {
         addLog(data);
-      }
-    });
+      });
 
-    scrcpyProcess!.exitCode.then((exitCode) {
-      addLog('scrcpy exited with code $exitCode.');
-      isMirroring = false;
-      if (isRecording) {
-        addLog('Recording saved to: $recordingPath');
-        isRecording = false;
-      }
-    });
-  } catch (e) {
-    addLog('Failed to start scrcpy: $e');
+      scrcpyProcess!.stderr.transform(utf8.decoder).listen((data) {
+        if (data.contains('ERROR')) {
+          addLog('Encountered error: $data');
+          stopScrcpy();
+          addLog('Retrying with default settings...');
+          // Retry with a more basic configuration
+          arguments = [];
+          startScrcpy(); // Retry without specific resolution
+        } else {
+          addLog(data);
+        }
+      });
+
+      scrcpyProcess!.exitCode.then((exitCode) {
+        addLog('scrcpy exited with code $exitCode.');
+        isMirroring = false;
+        if (isRecording) {
+          addLog('Recording saved to: $recordingPath');
+          isRecording = false;
+        }
+      });
+    } catch (e) {
+      addLog('Failed to start scrcpy: $e');
+    }
   }
-}
-
 
   Future<void> stopScrcpy() async {
     if (scrcpyProcess != null) {
@@ -208,14 +226,16 @@ Future<void> startScrcpy() async {
 
   Future<void> setRecordingPath() async {
     try {
-      final directory = Directory('${Platform.environment['USERPROFILE']}\\Videos');
+      final directory =
+          Directory('${Platform.environment['USERPROFILE']}\\Videos');
       if (!await directory.exists()) {
         await directory.create(recursive: true);
       }
 
       if (!isValidRecordingName(customRecordingName)) {
         addLog('Invalid recording name. Using default name.');
-        customRecordingName = 'scrcpy_recording_${DateTime.now().millisecondsSinceEpoch}';
+        customRecordingName =
+            'scrcpy_recording_${DateTime.now().millisecondsSinceEpoch}';
       }
 
       recordingPath = '${directory.path}\\$customRecordingName.mkv';
@@ -388,8 +408,7 @@ class _ScrcpyPageState extends State<ScrcpyPage> {
           onPressed:
               _controller.isMirroring ? null : () => _controller.startScrcpy(),
           style: ElevatedButton.styleFrom(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           ),
         ),
         const SizedBox(width: 20),
@@ -405,14 +424,13 @@ class _ScrcpyPageState extends State<ScrcpyPage> {
         ),
         const SizedBox(width: 20),
         ElevatedButton.icon(
-          icon: const Icon(Icons.clear_all),
-          label: const Text('Clear Log'),
-          onPressed: () => _controller.clearLog(),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-            backgroundColor: Colors.green, // Updated
-           )
-        ),
+            icon: const Icon(Icons.clear_all),
+            label: const Text('Clear Log'),
+            onPressed: () => _controller.clearLog(),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              backgroundColor: Colors.green, // Updated
+            )),
       ],
     );
   }
@@ -442,7 +460,8 @@ class _ScrcpyPageState extends State<ScrcpyPage> {
 
 Future<void> startHttpServer() async {
   final server = await HttpServer.bind(InternetAddress.anyIPv4, 8080);
-  print('HTTP Server running on http://${server.address.address}:${server.port}');
+  print(
+      'HTTP Server running on http://${server.address.address}:${server.port}');
   final controller = ScrcpyController();
 
   await for (HttpRequest request in server) {
@@ -461,10 +480,8 @@ Future<void> startHttpServer() async {
                 'message': 'Device IP set to ${controller.deviceIp}'
               }));
             } else {
-              request.response.write(jsonEncode({
-                'status': 'error',
-                'message': 'Failed to set device IP'
-              }));
+              request.response.write(jsonEncode(
+                  {'status': 'error', 'message': 'Failed to set device IP'}));
             }
             break;
           case 'start':
@@ -475,19 +492,15 @@ Future<void> startHttpServer() async {
                   data['recordingName'] ?? 'scrcpy_recording';
               await controller.startScrcpy();
             });
-            request.response.write(jsonEncode({
-              'status': 'success',
-              'message': 'Started mirroring'
-            }));
+            request.response.write(jsonEncode(
+                {'status': 'success', 'message': 'Started mirroring'}));
             break;
           case 'stop':
             SchedulerBinding.instance!.addPostFrameCallback((_) async {
               await controller.stopScrcpy();
             });
-            request.response.write(jsonEncode({
-              'status': 'success',
-              'message': 'Stopped mirroring'
-            }));
+            request.response.write(jsonEncode(
+                {'status': 'success', 'message': 'Stopped mirroring'}));
             break;
           case 'enable_tcpip':
             final result = await Process.run('adb', ['tcpip', '5555']);
@@ -504,16 +517,12 @@ Future<void> startHttpServer() async {
             }
             break;
           default:
-            request.response.write(jsonEncode({
-              'status': 'error',
-              'message': 'Unknown action: $action'
-            }));
+            request.response.write(jsonEncode(
+                {'status': 'error', 'message': 'Unknown action: $action'}));
         }
       } catch (e) {
-        request.response.write(jsonEncode({
-          'status': 'error',
-          'message': 'Invalid request data: $e'
-        }));
+        request.response.write(jsonEncode(
+            {'status': 'error', 'message': 'Invalid request data: $e'}));
       }
       await request.response.close();
     } else {
