@@ -128,4 +128,4 @@ If you are making larger changes, open an issue first so the direction can be re
 
 ## License
 
-This repository does not currently include a `LICENSE` file in the root. If this project is intended for public redistribution or formal contribution, add a license before publishing or accepting third-party contributions.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
